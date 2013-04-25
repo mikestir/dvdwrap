@@ -1,0 +1,6 @@
+dvdwrap
+-------
+
+A simple fuse filesystem which presents VOB files from a DVD image directory
+concatenated as single MPEG files.
+
