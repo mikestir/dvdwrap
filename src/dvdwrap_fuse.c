@@ -1,3 +1,25 @@
+/*
+ * dvdwrap, a fuse filesystem for easy access to DVD image directories
+ * Copyright (C) 2013 Mike Stirling
+ *
+ * This file is part of dvdwrap (http://mikestirling.co.uk/dvdwrap)
+ * All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ */
+
 #define FUSE_USE_VERSION 26
 
 #include <fuse.h>
@@ -56,7 +78,7 @@ static struct fuse_operations dvdwrap_oper = {
 	.open		= dvdwrap_open,
 	.read		= dvdwrap_read,
 	.release	= dvdwrap_release,
-	
+
 	.flag_nullpath_ok	= 1,
 };
 
@@ -116,7 +138,7 @@ static void dvdwrap_fill_videots(const char *path, void *buf, fuse_fill_dir_t fi
 	int n;
 
 	LOG("%s(%s, %p, %p)\n", __FUNCTION__, path, buf, filler);
-	
+
 	memset(vts, 0, sizeof(vts));
 
 	d = opendir(path);
@@ -152,10 +174,10 @@ static void dvdwrap_fill_videots(const char *path, void *buf, fuse_fill_dir_t fi
 static int dvdwrap_opendir(const char* path, struct fuse_file_info* fi)
 {
 	LOG("%s(%s, %p)\n", __FUNCTION__, path, fi);
-	
+
 	/* FIXME: We need to implement separate opendir/releasedir because we
 	 * declare flag_nullpath_ok, but there is no optimisation here yet */
-	
+
 	fi->fh = (uint64_t)strdup(path);
 	return 0;
 }
@@ -177,7 +199,7 @@ static int dvdwrap_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	/* Always return current and parent directories */
 	filler(buf, ".", NULL, 0);
 	filler(buf, "..", NULL, 0);
-	
+
 	/* Scan the equivalent location in the source path and proxy
 	 * through all subdirectories except VIDEO_TS.  Files are ignored. */
 	d = opendir(targetpath);
@@ -222,7 +244,7 @@ static int dvdwrap_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 static int dvdwrap_releasedir(const char* path, struct fuse_file_info *fi)
 {
 	LOG("%s(%s, %p)\n", __FUNCTION__, path, fi);
-	
+
 	free((void*)fi->fh);
 	return 0;
 }
@@ -239,9 +261,9 @@ static int dvdwrap_open(const char *path, struct fuse_file_info *fi)
 	char *tp1, *tp2;
 	char *dirpath, *filename;
 	struct stat st;
-	
+
 	LOG("%s(%s, %p)\n", __FUNCTION__, path, fi);
-	
+
 	/* Process path for filename and VTS major number */
 	snprintf(targetpath, PATH_MAX, "%s/%s", ctx->sourcepath, path);
 	tp1 = strdup(targetpath);
@@ -252,13 +274,13 @@ static int dvdwrap_open(const char *path, struct fuse_file_info *fi)
 		LOG("Bad filename\n");
 		return -ENOENT;
 	}
-	
+
 	/* Allocate private data */
 	private = calloc(1, sizeof(dvdwrap_fh_t));
 	if (private == NULL)
 		return -ENOMEM;
 	fi->fh = (uint64_t)private;
-	
+
 	/* Open all input files */
 	private->total = 0;
 	for (min = VTS_MIN_SKIP; min < MAX_VTS_MIN; min++) {
@@ -272,7 +294,7 @@ static int dvdwrap_open(const char *path, struct fuse_file_info *fi)
 			private->vts[min].size = st.st_size;
 			private->total += st.st_size;
 	}
-	
+
 	return 0;
 fail:
 	/* Clean up */
@@ -285,14 +307,14 @@ static int dvdwrap_read(const char *path, char *buf, size_t size, off_t offset,
 {
 	dvdwrap_fh_t *private = (dvdwrap_fh_t*)fi->fh;
 	int min;
-	
+
 	LOG("%s(%s, %p, %zd, %zd, %p)\n", __FUNCTION__, path, buf, size, offset, fi);
-	
+
 	if (offset >= private->total) {
 		/* EOF */
 		return 0;
 	}
-	
+
 	/* Determine the source file for this read */
 	for (min = VTS_MIN_SKIP; min < MAX_VTS_MIN; min++) {
 		if (offset < private->vts[min].size)
@@ -302,7 +324,7 @@ static int dvdwrap_read(const char *path, char *buf, size_t size, off_t offset,
 	if (size > private->vts[min].size - offset)
 		size = private->vts[min].size - offset;
 	LOG("File %d offset %zd size %zd\n", min, offset, size);
-	
+
 	lseek(private->vts[min].fd, offset, SEEK_SET);
 	return read(private->vts[min].fd, buf, size);
 }
@@ -311,9 +333,9 @@ static int dvdwrap_release(const char* path, struct fuse_file_info *fi)
 {
 	dvdwrap_fh_t *private = (dvdwrap_fh_t*)fi->fh;
 	int min;
-	
+
 	LOG("%s(%s, %p)\n", __FUNCTION__, path, fi);
-	
+
 	/* Close files and release private data */
 	for (min = VTS_MIN_SKIP; min < MAX_VTS_MIN; min++) {
 		if (private->vts[min].size) {
@@ -323,7 +345,7 @@ static int dvdwrap_release(const char* path, struct fuse_file_info *fi)
 	}
 	free(private);
 	fi->fh = 0;
-	
+
 	return -ENOENT;
 }
 
